@@ -1,0 +1,23 @@
+{
+  "name": "client",
+  "version": "1.0.0",
+  "description": "DropBox Clone",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mousecop/DropBox-Clone.git"
+  },
+  "author": "Jacob Askew",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Mousecop/DropBox-Clone/issues"
+  },
+  "homepage": "https://github.com/Mousecop/DropBox-Clone#readme",
+  "devDependencies": {
+    "eslint": "^3.19.0",
+    "eslint-plugin-react": "^6.10.3"
+  }
+}
