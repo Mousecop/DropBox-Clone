@@ -1,0 +1,13 @@
+Database Schema ideas
+
+
+For user:
+    Username string
+    password string(hash?)
+    connection to file db
+
+
+For file:
+    title string
+    content ?
+    location to be stored?
