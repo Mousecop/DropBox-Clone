@@ -11,3 +11,7 @@ For file:
     title string
     content ?
     location to be stored?
+
+
+
+connect wiki code handlers with new handlers for app
