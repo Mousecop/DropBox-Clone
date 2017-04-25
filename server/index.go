@@ -17,7 +17,8 @@ var service = s3.New(session.Must(session.NewSession(&aws.Config{Region: aws.Str
 func main() {
 	listBuckets()
 	// listFiles("first1321431")
-	uploadFile("first1321431", "secondTest.txt", "text/plain")
+	// uploadFile("first1321431", "secondTest.txt", "text/plain")
+	downloadFile("first1321431", "secondTest", "txt")
 }
 
 func listFiles(bucket string) *s3.ListObjectsOutput {
@@ -71,6 +72,26 @@ func uploadFile(bucket string, file string, mediaType string) {
 		},
 	}
 	service.PutObject(params)
+}
+
+func downloadFile(bucket string, file string, mediaType string) error {
+	//just add filename only, don't need .
+	params := &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(file + "." + mediaType),
+	}
+	result, err := service.GetObject(params)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(result.Body)
+	fileErr := ioutil.WriteFile(file+"_new."+mediaType, buf.Bytes(), 0644)
+	if fileErr != nil {
+		fmt.Println(err.Error())
+	}
+	fmt.Println("file write success")
+	return fileErr
 }
 
 //Make Buckets
