@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
+
+	"bytes"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -13,7 +16,8 @@ var service = s3.New(session.Must(session.NewSession(&aws.Config{Region: aws.Str
 
 func main() {
 	listBuckets()
-	listFiles("first1321431")
+	// listFiles("first1321431")
+	uploadFile("first1321431", "secondTest.txt", "text/plain")
 }
 
 func listFiles(bucket string) *s3.ListObjectsOutput {
@@ -46,6 +50,27 @@ func listBuckets() *s3.ListBucketsOutput {
 			aws.StringValue(b.Name), aws.TimeValue(b.CreationDate))
 	}
 	return result
+}
+
+func uploadFile(bucket string, file string, mediaType string) {
+	//make sure to provide full filename. EX test.txt
+	dat, err := ioutil.ReadFile(file)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	bytesToSend := bytes.NewReader(dat)
+	params := &s3.PutObjectInput{
+		Bucket:        aws.String(bucket),
+		Key:           aws.String(file),
+		ACL:           aws.String("public-read"),
+		Body:          bytesToSend,
+		ContentLength: aws.Int64(int64(len(dat))),
+		ContentType:   aws.String(mediaType),
+		Metadata: map[string]*string{
+			"Key": aws.String("MetadataValue"),
+		},
+	}
+	service.PutObject(params)
 }
 
 //Make Buckets
