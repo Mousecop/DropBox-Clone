@@ -15,3 +15,26 @@ For file:
 
 
 connect wiki code handlers with new handlers for app
+
+
+
+how to check if bucket name is taken
+
+
+Page struct to display each file?
+
+Bucket struct
+display name
+S3 bucket name -  random name
+list of files
+
+File struct
+display name
+actual file
+
+
+mongoDb in Go?
+
+
+
+end of tomorrow: login in, register with mongo, routing for api, start some frontend
