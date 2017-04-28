@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/icrowley/fake"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -23,10 +24,10 @@ var service = s3.New(session.Must(session.NewSession(&aws.Config{Region: aws.Str
 
 var sess *mgo.Session
 
-//Bucket : struct for S3 buckets
-type Bucket struct {
-	DisplayName string
-	BucketName  string
+//BucketRequest : struct for S3 buckets request
+type BucketRequest struct {
+	Username   string
+	Bucketname string
 }
 
 //File : struct to define img files
@@ -36,19 +37,20 @@ type File struct {
 	MediaType   string
 	Width       int64
 	Height      int64
+	BucketName  string
 }
 
 //User : struct to define users
 type User struct {
 	Username string
 	Password string
-	Buckets  []Bucket
+	Buckets  []models.Bucket
 }
 
 //Getters Start
 func (u User) listUserFiles() {
 	for i := 0; i < len(u.Buckets); i++ {
-		listFiles(u.Buckets[i])
+		// listFiles(u.Buckets[i])
 	}
 }
 
@@ -56,24 +58,27 @@ func (f File) getDimensionString() string {
 	return string(f.Width) + "x" + string(f.Height)
 }
 
-func (b Bucket) getBucketName() string {
-	return b.BucketName
-}
-
 //Getters End
 
-func listFiles(bucket Bucket) {
-	params := &s3.ListObjectsV2Input{
-		Bucket: aws.String(bucket.BucketName),
-	}
-	resp, err := service.ListObjectsV2(params)
+func makeFile(filename string, bucket string, size1 int64, size2 int64) *File {
+	name := filename[0 : len(filename)-4]
+	mediaType := filename[len(filename)-3:]
+	url := "https://s3.amazonaws.com/" + bucket + "/" + filename
+	return &File{DisplayName: name, URL: url, MediaType: mediaType, Width: size1, Height: size2}
+}
 
-	check(err)
-
-	// Pretty-print the response data.
-	for _, key := range resp.Contents {
-		fmt.Println(*key.Key)
+func makeBucket(name string) *models.Bucket {
+	first := fake.Word()
+	nums := fake.DigitsN(8)
+	randName := first + nums
+	// fmt.Println("randName:", randName)
+	return &models.Bucket{DisplayName: name, BucketName: randName}
+}
+func createBucket(bucket string) {
+	params := &s3.CreateBucketInput{
+		Bucket: aws.String(bucket),
 	}
+	service.CreateBucket(params)
 }
 
 //ListBucketsRequest : GET buckets?
@@ -89,19 +94,31 @@ func listBuckets() *s3.ListBucketsOutput {
 	return result
 }
 
+func listFiles(bucket string) []string {
+	params := &s3.ListObjectsV2Input{
+		Bucket: aws.String(bucket),
+	}
+	resp, err := service.ListObjectsV2(params)
+	listArray := make([]string, 0)
+	check(err)
+	for _, key := range resp.Contents {
+		listArray = append(listArray, *key.Key)
+	}
+	return listArray
+}
+
 //Upload a file
-func uploadFile(bucket Bucket, file File) {
-	//make sure to provide full filename. EX test.txt
-	dat, err := ioutil.ReadFile(file.DisplayName)
+func uploadFile(bucket string, file string, mediaType string) {
+	dat, err := ioutil.ReadFile(file + "." + mediaType)
 	check(err)
 	bytesToSend := bytes.NewReader(dat)
 	params := &s3.PutObjectInput{
-		Bucket:        aws.String(bucket.BucketName),
-		Key:           aws.String(file.DisplayName),
+		Bucket:        aws.String(bucket),
+		Key:           aws.String(file + "." + mediaType),
 		ACL:           aws.String("public-read"),
 		Body:          bytesToSend,
 		ContentLength: aws.Int64(int64(len(dat))),
-		ContentType:   aws.String(file.MediaType),
+		ContentType:   aws.String(mediaType),
 		Metadata: map[string]*string{
 			"Key": aws.String("MetadataValue"),
 		},
@@ -110,17 +127,18 @@ func uploadFile(bucket Bucket, file File) {
 }
 
 //Download a file
-func downloadFile(bucket Bucket, file File) error {
-	//just add filename only, don't need .
+func downloadFile(bucket string, file string, mediaType string) error {
+	fmt.Println("file:", file)
 	params := &s3.GetObjectInput{
-		Bucket: aws.String(bucket.BucketName),
-		Key:    aws.String(file.DisplayName + "." + file.MediaType),
+		Bucket: aws.String(bucket),
+		Key:    aws.String(file + "." + mediaType),
 	}
 	result, err := service.GetObject(params)
 	check(err)
+	fmt.Println("bucket:", bucket)
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(result.Body)
-	fileErr := ioutil.WriteFile(file.DisplayName+"_new."+file.MediaType, buf.Bytes(), 0644)
+	fileErr := ioutil.WriteFile(file+"_new."+mediaType, buf.Bytes(), 0644)
 	if fileErr != nil {
 		fmt.Println(err.Error())
 	}
@@ -128,16 +146,8 @@ func downloadFile(bucket Bucket, file File) error {
 	return fileErr
 }
 
-//Make Buckets
-func createBucket(bucket Bucket) {
-	params := &s3.CreateBucketInput{
-		Bucket: aws.String(bucket.BucketName),
-	}
-	service.CreateBucket(params)
-}
-
 //Delete Buckets
-func deleteBucket(bucket Bucket) {
+func deleteBucket(bucket models.Bucket) {
 	params := &s3.DeleteBucketInput{
 		Bucket: aws.String(bucket.BucketName),
 	}
@@ -174,24 +184,12 @@ func bsonify(r *http.Request) bson.M {
 	return body
 }
 
-func createUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	w.Header().Set("Content-Type", "application/json")
-	c := sess.DB("dropbox-clone").C("user")
-	request := bsonify(r)
-	writeSuccess := dao.Create(c, request)
-	if writeSuccess {
-		createResponse(request, &w)
-		return
-	}
-	createFailureResponse("Something went wrong", &w)
-	return
-}
-
 func handleLogin(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	w.Header().Set("Content-type", "application/json")
 	c := sess.DB("dropbox-clone").C("user")
 	request := bsonify(r)
 	doc := models.User{}
+	fmt.Println(request)
 	readSuccess := dao.ReadOne(c, request, &doc)
 	if readSuccess {
 		if doc.Username == request["username"] && doc.Password == request["password"] {
@@ -212,15 +210,67 @@ func handleRegister(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 	writeSuccess := dao.Create(c, request)
 	if writeSuccess {
 		createResponse(request, &w)
-		fmt.Println(request)
 		return
 	}
 	createFailureResponse("something went wrong", &w)
 	return
 }
 
-func handleBucketList(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	listBuckets()
+func handleBucket(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	w.Header().Set("Content-Type", "application/json")
+	c := sess.DB("dropbox-clone").C("user")
+	body := BucketRequest{}
+	check(json.NewDecoder(r.Body).Decode(&body))
+	b := makeBucket(ps.ByName("bucketname"))
+	query := bson.M{"username": body.Username}
+	user := models.User{}
+	readSuccess := dao.ReadOne(c, query, &user)
+	if readSuccess {
+		createBucket(b.BucketName)
+		user.Buckets = append(user.Buckets, *b)
+		dao.UpdateOne(c, query, bson.M{"$set": bson.M{"buckets": user.Buckets}})
+		fmt.Println("user", user.Username)
+		createResponse(user, &w)
+		return
+	}
+	createFailureResponse("Something went wrong!", &w)
+}
+
+func handleFileUpload(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	w.Header().Set("Content-Type", "application/json")
+	body := File{}
+	check(json.NewDecoder(r.Body).Decode(&body))
+	f := makeFile(body.DisplayName+"."+body.MediaType, body.BucketName, body.Height, body.Width)
+	uploadFile(body.BucketName, f.DisplayName, f.MediaType)
+	fmt.Println("file created!")
+	createResponse(bson.M{}, &w)
+}
+
+func handleFileDownload(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	w.Header().Set("Content-Type", "application/json")
+	c := sess.DB("dropbox-clone").C("user")
+	user := models.User{}
+	query := bson.M{"username": "dev"}
+	readSuccess := dao.ReadOne(c, query, &user)
+	if readSuccess {
+		downloadFile(ps.ByName("bucketname"), ps.ByName("filename"), ps.ByName("mediatype"))
+		fmt.Println("download worked!!")
+		createResponse(user, &w)
+	}
+}
+
+func handleListFiles(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	w.Header().Set("Content-Type", "application/json")
+	c := sess.DB("dropbox-clone").C("user")
+	query := bson.M{"username": "dev"}
+	user := models.User{}
+	readSuccess := dao.ReadOne(c, query, &user)
+	if readSuccess {
+		list := listFiles(ps.ByName("bucketname"))
+		createResponse(list, &w)
+		return
+	}
+	createFailureResponse("Something went wrong", &w)
 }
 
 func main() {
@@ -232,10 +282,13 @@ func main() {
 	sess.SetMode(mgo.Monotonic, true)
 
 	router := httprouter.New()
-
+	//ROUTES
 	router.POST("/api/authenticate", handleLogin)
 	router.POST("/api/register", handleRegister)
-	router.GET("/", handleBucketList)
+	router.POST("/api/bucket/:bucketname", handleBucket)
+	router.POST("/api/file/upload", handleFileUpload)
+	router.GET("/api/file/download/:bucketname/:filename/:mediatype", handleFileDownload)
+	router.GET("/api/user/files/:bucketname", handleListFiles)
 
 	http.ListenAndServe(":8080", router)
 }
