@@ -38,3 +38,14 @@ mongoDb in Go?
 
 
 end of tomorrow: login in, register with mongo, routing for api, start some frontend
+
+
+
+Questions:
+    How to use the getter functions in other functions, etc?
+
+    User struct can be used as the model? Do we want to store files on DB as well then?
+
+    User struct has a bucket slice with type of Bucket.. Where are the files going then?
+
+    
